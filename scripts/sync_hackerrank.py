@@ -1,6 +1,7 @@
 import os
 import requests
 import subprocess
+import time
 
 HRANK_SESSION = os.environ['HRANK_SESSION']
 GITHUB_TOKEN = os.environ['GITHUB_TOKEN']
@@ -18,6 +19,7 @@ EXT_MAP = {
 HEADERS = {
     'Cookie': f'_hrank_session={HRANK_SESSION}',
     'User-Agent': 'Mozilla/5.0',
+    'Accept': 'application/json',
 }
 
 
@@ -28,6 +30,18 @@ def run(cmd):
     return result
 
 
+def get_submission_code(submission_id):
+    """Fetch code from individual submission detail endpoint"""
+    url = f'https://www.hackerrank.com/rest/contests/master/submissions/{submission_id}'
+    resp = requests.get(url, headers=HEADERS)
+    if resp.status_code == 200:
+        data = resp.json()
+        model = data.get('model', {})
+        return model.get('code', '')
+    print(f'Failed to get code for submission {submission_id}: {resp.status_code}')
+    return ''
+
+
 def get_submissions():
     submissions = []
     offset = 0
@@ -35,9 +49,9 @@ def get_submissions():
     while True:
         url = f'https://www.hackerrank.com/rest/contests/master/submissions/?offset={offset}&limit={limit}'
         resp = requests.get(url, headers=HEADERS)
-        print(f'API status: {resp.status_code}')
+        print(f'API status: {resp.status_code}, offset: {offset}')
         if resp.status_code != 200:
-            print(f'Response: {resp.text[:300]}')
+            print(f'Response: {resp.text[:500]}')
             break
         data = resp.json()
         models = data.get('models', [])
@@ -72,12 +86,18 @@ def main():
     synced = 0
 
     for sub in submissions:
+        sub_id = sub.get('id')
         challenge_slug = sub.get('challenge', {}).get('slug', 'unknown')
         language = sub.get('language', 'txt').lower()
-        code = sub.get('code', '')
+
+        print(f'Fetching code for: {challenge_slug} (id={sub_id})')
+        code = get_submission_code(sub_id)
+        time.sleep(0.5)  # be polite to the API
+
         if not code:
-            print(f'No code for: {challenge_slug}')
+            print(f'No code returned for: {challenge_slug}')
             continue
+
         ext = EXT_MAP.get(language, 'txt')
         file_path = f'{DEST_FOLDER}/{challenge_slug}/solution.{ext}'
 
@@ -85,15 +105,18 @@ def main():
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(code)
 
-        run(f'git add {file_path}')
+        run(f'git add "{file_path}"')
         commit_msg = f'[HackerRank Sync] {challenge_slug} ({language})'
-        result = run(f'git diff --cached --quiet || git commit -m "{commit_msg}"')
+        run(f'git diff --cached --quiet || git commit -m "{commit_msg}"')
+        print(f'Committed: {file_path}')
         synced += 1
-        print(f'Staged: {file_path}')
 
     if synced > 0:
         push = run('git push origin main')
-        print(f'Push result: {push.stdout} {push.stderr}')
+        print(f'Push stdout: {push.stdout}')
+        print(f'Push stderr: {push.stderr}')
+    else:
+        print('No files to push.')
 
     print(f'Done! Synced {synced}/{len(submissions)} submissions.')
 
