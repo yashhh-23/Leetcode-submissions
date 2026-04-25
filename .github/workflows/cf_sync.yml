@@ -1,0 +1,34 @@
+name: Sync Codeforces
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "31 18 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r cf_requirements.txt
+
+      - name: Run Codeforces AutoPush
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_API_SECRET: ${{ secrets.CF_API_SECRET }}
+          CF_HANDLE: ${{ secrets.CF_HANDLE }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_REPO: ${{ secrets.TARGET_REPO }}
+          GITHUB_TARGET_DIR: ${{ secrets.TARGET_DIR }}
+        run: python cf_autopush.py
