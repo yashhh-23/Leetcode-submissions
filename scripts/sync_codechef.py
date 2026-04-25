@@ -1,111 +1,119 @@
 import os
-import json
+import base64
 import requests
-from datetime import datetime
 
-# ── Config from environment ──────────────────────────────────────────────────
-USERNAME   = os.environ["CODECHEF_USERNAME"]
-SESSION    = os.environ["CODECHEF_SESSION"]
-GH_TOKEN   = os.environ["GITHUB_TOKEN"]
-GH_REPO    = os.environ["GITHUB_REPOSITORY"]   # e.g. yashhh-23/Leetcode-submissions
-OUTPUT_DIR = "codechef"
-
+# ── Config ───────────────────────────────────────────────────────────────────
+USERNAME         = os.environ["CODECHEF_USERNAME"]
+SESSION          = os.environ["CODECHEF_SESSION"]
+GH_TOKEN         = os.environ["GITHUB_TOKEN"]
+GH_REPO          = os.environ["GITHUB_REPOSITORY"]
+OUTPUT_DIR       = "codechef"
 SESS_COOKIE_NAME = "SESS93b6022d778ee317bf48f7dbffe03173"
 
+# Full browser-like headers to avoid 403
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": f"https://www.codechef.com/users/{USERNAME}",
     "Cookie": f"{SESS_COOKIE_NAME}={SESSION}",
-    "Referer": "https://www.codechef.com",
 }
 
-# ── Fetch accepted submissions from CodeChef API ─────────────────────────────
-def fetch_submissions(limit=20, offset=0):
-    url = f"https://www.codechef.com/api/submissions?username={USERNAME}&result=AC&limit={limit}&offset={offset}"
-    resp = requests.get(url, headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+# ── Fetch all AC submissions via /recent/user endpoint ───────────────────────
+def fetch_page(page=1):
+    url = f"https://www.codechef.com/recent/user?page={page}&user_handle={USERNAME}&status=AC"
+    r = requests.get(url, headers=HEADERS, timeout=30)
+    print(f"  [{r.status_code}] GET {url}")
+    r.raise_for_status()
+    return r.json()
 
-def fetch_all_submissions():
-    submissions = []
-    offset = 0
-    limit  = 20
+def fetch_all():
+    results = []
+    page = 1
     while True:
-        data = fetch_submissions(limit=limit, offset=offset)
-        batch = data.get("data", [])
+        data    = fetch_page(page)
+        batch   = data.get("data", [])
         if not batch:
             break
-        submissions.extend(batch)
-        if len(batch) < limit:
+        results.extend(batch)
+        total = int(data.get("totalPages", 1))
+        if page >= total:
             break
-        offset += limit
-    return submissions
+        page += 1
+    return results
 
-# ── GitHub API helpers ────────────────────────────────────────────────────────
-def gh_headers():
-    return {
-        "Authorization": f"token {GH_TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-def get_existing_file(path):
-    url = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
-    resp = requests.get(url, headers=gh_headers())
-    if resp.status_code == 200:
-        return resp.json()
-    return None
-
-def commit_file(path, content, message):
-    import base64
-    url  = f"https://api.github.com/repos/{GH_REPO}/contents/{path}"
-    b64  = base64.b64encode(content.encode()).decode()
-    body = {"message": message, "content": b64}
-    existing = get_existing_file(path)
-    if existing:
-        body["sha"] = existing["sha"]
-    resp = requests.put(url, headers=gh_headers(), json=body)
-    return resp.status_code in (200, 201)
-
-# ── Extension map ────────────────────────────────────────────────────────────
-EXT = {
-    "C": "c", "C++": "cpp", "C++14": "cpp", "C++17": "cpp",
-    "Java": "java", "Java 8": "java",
-    "Python": "py", "Python3": "py", "PyPy3": "py",
-    "JavaScript": "js",
+# ── GitHub helpers ───────────────────────────────────────────────────────────
+GH_HEADERS = {
+    "Authorization": f"token {GH_TOKEN}",
+    "Accept": "application/vnd.github.v3+json",
 }
 
-def get_ext(lang):
-    for key, ext in EXT.items():
-        if key.lower() in lang.lower():
-            return ext
-    return "txt"
+def get_sha(path):
+    r = requests.get(
+        f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+        headers=GH_HEADERS,
+    )
+    if r.status_code == 200:
+        j = r.json()
+        if isinstance(j, dict):
+            return j.get("sha")
+    return None
+
+def push_file(path, content, message):
+    b64  = base64.b64encode(content.encode("utf-8", errors="replace")).decode()
+    body = {"message": message, "content": b64}
+    sha  = get_sha(path)
+    if sha:
+        body["sha"] = sha
+    r = requests.put(
+        f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+        headers=GH_HEADERS,
+        json=body,
+    )
+    return r.status_code in (200, 201)
+
+# ── Language -> extension ────────────────────────────────────────────────────
+EXT_MAP = {
+    "c": "c", "c++": "cpp", "c++14": "cpp", "c++17": "cpp",
+    "java": "java", "java8": "java",
+    "python": "py", "python3": "py", "pypy3": "py",
+    "javascript": "js",
+}
+
+def ext(lang):
+    return EXT_MAP.get(lang.lower().replace(" ", "").replace("+", "p"), "txt")
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():
-    print(f"Fetching accepted submissions for {USERNAME}...")
-    subs = fetch_all_submissions()
-    print(f"Found {len(subs)} accepted submissions.")
+    print(f"Fetching AC submissions for {USERNAME} ...")
+    try:
+        subs = fetch_all()
+    except Exception as e:
+        print(f"FATAL: {e}")
+        raise
 
-    synced = 0
+    print(f"Total AC submissions found: {len(subs)}")
+    ok_count = 0
+
     for sub in subs:
-        problem_code = sub.get("problemCode") or sub.get("problem_code", "unknown")
-        language     = sub.get("language", "txt")
-        code         = sub.get("sourceCode") or sub.get("source_code", "")
+        code_key  = sub.get("problemCode") or sub.get("problem_code", "UNKNOWN")
+        lang      = sub.get("language") or sub.get("languageName", "txt")
+        code      = sub.get("sourceCode") or sub.get("source_code", "")
+
         if not code:
-            print(f"  Skipping {problem_code} — no source code returned.")
+            print(f"  SKIP {code_key} — no source code returned")
             continue
 
-        ext      = get_ext(language)
-        filename = f"{OUTPUT_DIR}/{problem_code}/{problem_code}.{ext}"
-        message  = f"[CodeChef Sync] {problem_code} ({language})"
+        file_ext  = ext(lang)
+        path      = f"{OUTPUT_DIR}/{code_key}/{code_key}.{file_ext}"
+        msg       = f"[CodeChef Sync] {code_key} ({lang})"
 
-        ok = commit_file(filename, code, message)
-        status = "✓" if ok else "✗"
-        print(f"  {status} {problem_code}.{ext}")
+        ok = push_file(path, code, msg)
+        print(f"  {'OK  ' if ok else 'FAIL'} {path}")
         if ok:
-            synced += 1
+            ok_count += 1
 
-    print(f"\nDone — {synced}/{len(subs)} submissions synced to '{OUTPUT_DIR}/' folder.")
+    print(f"\nDone: {ok_count}/{len(subs)} pushed to '{OUTPUT_DIR}/'")
 
 if __name__ == "__main__":
     main()
