@@ -1,0 +1,28 @@
+name: Sync HackerRank
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "31 18 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run HackerRank sync script
+        env:
+          HRANK_SESSION: ${{ secrets.HRANK_SESSION }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: python scripts/sync_hackerrank.py
