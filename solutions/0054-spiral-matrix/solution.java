@@ -1,127 +1,45 @@
-	import java.util.ArrayList;
+class Solution {
+    public List<Integer> spiralOrder(int[][] matrix) {
+        int m = matrix.length;
+        int n = matrix[0].length;
 
-	import java.util.List;
+        int top = 0, bottom = m-1, l = 0, r = n-1;
 
-	 
+        List<Integer> result = new ArrayList<>();
 
-	public class Solution {
+        while(top <= bottom && l <= r){
 
-	    public List<Integer> spiralOrder(int[][] matrix) {
+            for(int i=l; i<=r; i++)
+            {
+                result.add(matrix[top][i]);
+            }
+            top++;
 
-	        List<Integer> ans = new ArrayList<>();
+            for(int i=top; i<=bottom; i++)
+            {
+                result.add(matrix[i][r]);
+            }
+            r--;
+          
+            if(top <= bottom)
+            {
+                for(int i=r; i>=l; i--){
+                    result.add(matrix[bottom][i]);
+                }
+                bottom--;
+            }
 
-	        if (matrix.length == 0) return ans;
+            if(l <= r)
+            {
+                for(int i=bottom; i>=top; i--)
+                {
+                    result.add(matrix[i][l]);
+                }
+                l++;
+            }
+        }
 
-	 
+        return result;
+    }
+}
 
-	        int m = matrix.length;
-
-	        int n = matrix[0].length;
-
-	        int UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3;
-
-	        int direction = RIGHT;
-
-	 
-
-	        int UP_WALL = 0;
-
-	        int RIGHT_WALL = n;
-
-	        int DOWN_WALL = m;
-
-	        int LEFT_WALL = -1;
-
-	 
-
-	        int i = 0, j = 0;
-
-	 
-
-	        while (ans.size() != m * n) {
-
-	            if (direction == RIGHT) {
-
-	                while (j < RIGHT_WALL) {
-
-	                    ans.add(matrix[i][j]);
-
-	                    j++;
-
-	                }
-
-	                i++;
-
-	                j--;
-
-	                RIGHT_WALL--;
-
-	                direction = DOWN;
-
-	            } else if (direction == DOWN) {
-
-	                while (i < DOWN_WALL) {
-
-	                    ans.add(matrix[i][j]);
-
-	                    i++;
-
-	                }
-
-	                i--;
-
-	                j--;
-
-	                DOWN_WALL--;
-
-	                direction = LEFT;
-
-	            } else if (direction == LEFT) {
-
-	                while (j > LEFT_WALL) {
-
-	                    ans.add(matrix[i][j]);
-
-	                    j--;
-
-	                }
-
-	                i--;
-
-	                j++;
-
-	                LEFT_WALL++;
-
-	                direction = UP;
-
-	            } else {
-
-	                while (i > UP_WALL) {
-
-	                    ans.add(matrix[i][j]);
-
-	                    i--;
-
-	                }
-
-	                i++;
-
-	                j++;
-
-	                UP_WALL++;
-
-	                direction = RIGHT;
-
-	            }
-
-	        }
-
-	 
-
-	        return ans;
-
-	    }
-
-	}
-
-	 
